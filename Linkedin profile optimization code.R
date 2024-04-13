@@ -1,0 +1,148 @@
+library(shiny)
+library(shinydashboard)
+library(DT)
+library(readtext)  # For reading Word documents
+library(wordcloud2) # For creating word clouds
+library(ggplot2)    # For creating bar plots
+
+ui <- dashboardPage(
+  dashboardHeader(title = "LinkedIn Profile Enhancement Tool"),
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("Home", tabName = "home", icon = icon("home")),
+      menuItem("Upload and Analyze", tabName = "upload", icon = icon("upload")),
+      menuItem("Analysis Results", tabName = "results", icon = icon("bar-chart"))
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      # Home tab content
+      tabItem(tabName = "home",
+              fluidRow(
+                box(
+                  title = "Welcome to the LinkedIn Profile Enhancement Tool",
+                  status = "primary",
+                  solidHeader = TRUE,
+                  collapsible = TRUE,
+                  width = 12,
+                  p("This tool helps you analyze your LinkedIn profile or CV to enhance its impact. Upload your CV or enter your LinkedIn profile URL, and the app will provide insights on how to improve your presentation and suggest relevant job opportunities."),
+                  p("Navigate to the 'Upload and Analyze' tab to get started!")
+                )
+              )
+      ),
+      
+      # Upload and Analyze tab content
+      tabItem(tabName = "upload",
+              fluidRow(
+                box(
+                  title = "Upload Your CV or Enter LinkedIn Profile URL",
+                  status = "primary",
+                  solidHeader = TRUE,
+                  collapsible = TRUE,
+                  width = 12,
+                  fileInput("file", "Choose a .docx file:", accept = c(".docx")),
+                  textInput("profileUrl", "LinkedIn Profile URL:"),
+                  actionButton("fetchProfile", "Analyze", class = "btn-primary")
+                )
+              )
+      ),
+      
+      # Analysis Results tab content
+      tabItem(tabName = "results",
+              fluidRow(
+                box(
+                  title = "Text Analysis - Word Cloud",
+                  status = "primary",
+                  solidHeader = TRUE,
+                  collapsible = TRUE,
+                  width = 12,
+                  wordcloud2Output("wordCloudPlot")
+                )
+              ),
+              fluidRow(
+                box(
+                  title = "Job Match Score Analysis",
+                  status = "primary",
+                  solidHeader = TRUE,
+                  collapsible = TRUE,
+                  width = 12,
+                  plotOutput("scorePlot")
+                )
+              ),
+              fluidRow(
+                box(
+                  title = "Profile and Job Match Results",
+                  status = "primary",
+                  solidHeader = TRUE,
+                  collapsible = TRUE,
+                  width = 12,
+                  DTOutput("resultsTable"),
+                  verbatimTextOutput("feedback")
+                )
+              )
+      )
+    )
+  )
+)
+
+server <- function(input, output) {
+  results <- reactiveValues(data = NULL)
+  
+  observeEvent(input$fetchProfile, {
+    if (is.null(input$file$datapath) && nzchar(input$profileUrl) == FALSE) {
+      showModal(modalDialog(
+        title = "Input Error",
+        "Please upload a CV or enter a LinkedIn profile URL.",
+        easyClose = TRUE,
+        footer = NULL
+      ))
+      return()
+    }
+    
+    profile_text <- NULL
+    if (!is.null(input$file$datapath)) {
+      profile_text <- tolower(readtext::readtext(input$file$datapath)$text)
+      output$wordCloudPlot <- renderWordcloud2({
+        wordcloud2(data = table(strsplit(profile_text, "\\s+")))
+      })
+    } else {
+      output$wordCloudPlot <- renderWordcloud2({ })
+    }
+    
+    # Simulate job match scoring
+    skill_score <- sample(70:100, 1, TRUE)  # Random skill score
+    experience_score <- sample(70:100, 1, TRUE)  # Random experience score
+    
+    suggestions <- ifelse(skill_score > 85 && experience_score > 85,
+                          "Your profile matches well with industry standards.",
+                          "Consider enhancing your skills with relevant courses.")
+    
+    job_matches <- data.frame(
+      Category = c("Skill Relevance", "Experience Relevance"),
+      Score = c(skill_score, experience_score),
+      Suggestion = c(ifelse(skill_score > 85, "Excellent skills.", "Consider upskilling."),
+                     ifelse(experience_score > 85, "Great experience.", "Seek more practical exposure.")),
+      stringsAsFactors = FALSE
+    )
+    
+    results$data <- job_matches
+    
+    output$scorePlot <- renderPlot({
+      ggplot(job_matches, aes(x = Category, y = Score, fill = Category)) +
+        geom_col() +
+        ylim(0, 100) +
+        labs(title = "Job Match Scores", y = "Percentage Score", x = "") +
+        theme_minimal()
+    })
+    
+    output$resultsTable <- renderDT({
+      datatable(results$data, options = list(pageLength = 5, searching = FALSE, lengthChange = FALSE))
+    })
+    
+    output$feedback <- renderText({
+      "Results are based on a simulated analysis. Real implementation would require live data fetching and analysis."
+    })
+  })
+}
+
+shinyApp(ui, server)
